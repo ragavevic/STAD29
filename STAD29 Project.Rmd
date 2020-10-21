@@ -1,0 +1,167 @@
+```{r}
+library(broom)
+library(nnet)
+library(survival)
+library(tidyverse)
+library(survminer)
+```
+
+**Introduction**
+The data set “nafld1” provides data from a study of non-alcoholic fatty liver disease (NAFLD). NAFLD represents the presence of excess liver fat. This study is of particular interest as the author Therneau (2020) states that there is currently an obesity epidemic in the United States (U.S.A) which has led to a large increase in the number of individuals suffering from non-alcoholic fatty liver disease (Therneau, 2020, p.63). In addition, Therneau (2020) states that about 20-25% of patients who have NAFLD, will have an “inflammatory state of non-alcoholic steatohepatitis (NASH), leading to fibrosis and eventual end stage liver disease” (Therneau, 2020, p.63). The problem that our analysis will tackle is “Do any of the variables in our analysis increase or decrease the event of hazard, which is death, and if so, which ones?”. Therefore, our group hopes to identify if there are any variables that increase or decrease the probability of death. The objective is to find the explanatory variables that are significant in predicting survival and to obtain predicted survival probabilities using the new data frame created of all variable combinations. By the end of the study we want to determine which individuals with NAFLD are more likely to survive.
+
+**Materials and Methods**
+The data used was collected by Allen, Therneau, Larson, Coward, Somers and Kamath in 2018. The data was collected on a sample of adults with non-alcoholic fatty liver disease in the United States, Olmsted County, Minnesota between the years 1997 to 2014 (Allen et al., 2018). Additionally, the data was collected and analyzed using the Rochester Epidemiology Project database (Allen et al., 2018). The research study includes 17,549 observations of patients with 9 variables; “id”, “age”, “male”, “weight”, “height”, “bmi”, “case.id”, “futime”, and “status”. For the purpose of this study, the variables being assessed in this analysis are “age”, “male”, “weight”, “height”, “bmi”, “futime” and “status”.
+
+**Analysis**
+Before we start with the analysis, we will first assess the original datafile to determine if we need to clean it.
+```{r}
+head(nafld1, n=20)
+```
+The first column of the data set “id” is quantitative but represents the subject identifier and is unique to each subject who participated in the study. The second column “age” is also quantitative and represents the subject’s age when they entered the study. The third column “male” is quantitative and binary, representing the sex of the subject in the study. In this column 0 represents female and 1 represents male. The column “weight” is a quantitative and continuous column that contains the weight in kilograms of each participant. The column “height” stands for the height of the subject in centimeters and is both quantitative and continuous. The column “bmi” is a measure of the subject’s body mass index and is also quantitative and continuous. The column “case.id” represents the identifier of the NAFLD case to which the subject is matched, is a quantitative column and is discrete as well. The column “futime” represents the time till death or the last follow-up. This column is quantitative and is continuous. Lastly, the column “status” represents the event of hazard and the values are 0 if the subject is still alive at the last follow-up, and 1 if the subject is dead. Each row corresponds to one subject and the data set includes the correct number of rows and columns. In analyzing the data however there are “NA” values which represent missing values in the data set. To identify how many NA’s there are in the data frame, we will use the summary function:
+
+```{r}
+summary(nafld1)
+```
+To clean the data, we will extract the NA values to gain a more insightful depiction of the data:
+
+```{r}
+nafld1 %>% drop_na() -> nafld11
+head(nafld11, n=20)
+```
+
+To confirm that we have removed all NA’s, we will use the summary function:
+
+```{r}
+summary(nafld11)
+```
+
+As we can see above, there are no NA’s left in the data frame.
+```{r}
+nrow(nafld11)
+```
+
+Currently, now we are working with 12,562 rows. Originally, we had 17,549 rows which means we lost 4,987 rows.
+
+Now we will tidy the data frame. The column titled “male” is depicted to be quantitative, however it truly is an identifier and should be treated as categorical rather than quantitative. In the current data, values with 0 refer to female and 1 refer to male. First, we will rename the column “male” to “sex”:
+```{r}
+nafld_new <- nafld11 %>% rename(sex = male)
+nafld_new
+```
+
+Since the column “sex” is in a quantitative format but is truly meant to distinguish categorical levels, we will convert the data. To do this, we will use the mutate function to change the variable to make it categorical rather than quantitative:
+```{r}
+liver<- nafld_new %>% mutate(sex = ifelse(sex == 1, "male", "female"))
+liver
+```
+Through analyzing the data set, since the event is “death”, the appropriate analysis to conduct is a survival analysis.
+
+*Cox Proportional Hazards*
+
+Since we are predicting the survival of subjects, we will conduct a cox proportional hazard assessment (survival analysis). The event here is death, so the two parts of the response variable are follow-up time; “futime” and follow-up status where 1 represents the event of interest which is “death”.
+```{r}
+response <- with(liver, Surv(futime, status == 1))
+head(response,n=30)
+```
+The values with the + sign are censored. Censored values distinguish subjects who were still alive the last time they were observed at their last follow-up meeting. Furthermore, the censored values are patients who were never observed to die; subjects who were still alive at the end of the study. The reason why the censored values tend to be higher are because they represent subjects who are still alive at the end of the study, and therefore have survived longer.
+
+Our group decided to exclude the columns “case.id” and “id” from the analysis since they will not provide any insight into data trends and are just unique identifiers. Using the response variable that was created, we will fit a cox proportional hazards model predicting survival time from age, sex, weight, height, and bmi.
+
+```{r}
+nafld.1 <- coxph(response ~ age + weight + height + bmi + sex, data = liver)
+summary(nafld.1)
+```
+
+In testing the overall fit of the model, the pvalue for age is less than an alpha of 0.05. This suggests that age is significant and should not be removed from the model. For weight, the pvalue is 0.3716 which is larger than an alpha of 0.05. This suggests that weight is not significant in predicting survival. For height, the pvalue is 0.0751 which is also greater than an alpha of 0.05 which suggests it is not significant. For bmi, the pvalue is 0.6626 which is also greater than an alpha of 0.05 suggesting it is not significant. For the variable sex, the pvalue is less than 0.05 which means that there is evidence to suggest that the subject’s sex is significant to predicting survival. There are three variables (weight, height, bmi) that have pvalues that are not significant and since bmi has the largest pvalue, that variable should be the first to be taken out of the model. Additionally, to analyze which explanatory variables can be removed from the model we will use drop1.
+
+```{r}
+drop1(nafld.1, test = "Chisq")
+```
+
+As we identified above, the variables bmi, weight and height all have non-significant pvalues and bmi should be the first to be removed from the model since its value of 0.65881 is larger than 0.36163 (weight) and 0.06826 (height). Therefore, we will remove bmi and re-fit the model.
+
+```{r}
+nafld.2 <- coxph(response ~ age + weight + height + sex, data = liver)
+summary(nafld.2)
+```
+In analyzing the results of the new model, the pvalues for all four variables (age, weight, height, sex) are all less than an alpha of 0.05. This suggests that all variables are significant in the model and should not be removed. To confirm this, we will compare our original model with the updated one.
+
+```{r}
+anova(nafld.2, nafld.1)
+```
+
+In analyzing the results from the anova, the pvalue is 0.6588 which is greater than an alpha of 0.05. This suggests that the variable (bmi) we removed is not meaningful and has no significant relationship. Therefore, it is okay to remove “bmi” and to use the smaller model with variables age, sex, weight and height only. Furthermore, the model we will use for the rest of the analysis is “nafld.2”.
+
+Looking at the coefficients of the explanatory variables in the new model, all of them are positive except for height. A positive coefficient means that increasing that variable increases the probability of the hazard of the event; which in this case is death. Having a positive coefficient means that the hazard of event is higher and is more likely to happen. A negative coefficient means that increasing that variable makes the hazard of the event smaller. In the output, the coefficient for “age” is 0.098329 and is positive meaning that as age increases, the hazard of death increases all else equal. The coefficient for “weight” is 0.005647 and is positive meaning that as weight increases, the probability of death increases all else equal. The coefficient for “height” is -0.018697 and is negative meaning that as height increases, the probability of death is smaller all else equal. Lastly, the coefficient for “sex” is 0.564604. Since “sex” is categorical, the baseline for the analysis is the value that comes first alphabetically which in this case is “female” since it comes before “male”. Therefore, since “female” is the baseline, we are predicting the probability of “male”, and since it is positive this means that the probability of death is higher for males compared to females all else equal.
+
+*Predicted Probabilities*
+
+To create the predicted probabilities, we will use the first and third quartiles of the quantitative variables (age, weight, height), and the two levels of the categorical variable (sex).
+
+```{r}
+quantile(liver$age)
+```
+Therefore, for age the first quartile is 44 and the third is 64.
+
+```{r}
+quantile(liver$weight)
+```
+Therefore, for weight the first quartile is 70 and the third is 99.3.
+
+```{r}
+quantile(liver$height)
+```
+Therefore, for height the first quartile is 162 and the third is 177.
+
+```{r}
+liver%>%distinct(sex)
+```
+Therefore, the two levels for sex are “female” and “male”.
+
+Using crossing we will create a new data frame containing all possible combinations of age, weight, height and sex. This new data frame is going to be used for the prediction.
+
+```{r}
+ages <- c(44, 64)
+sexes <- c("female", "male")
+weights<-c(70,99.3)
+heights<-c(162,177)
+new <- crossing (age = ages, sex = sexes,weight=weights,height=heights)
+new
+```
+The data frame titled “new” has 16 rows that represent all combinations of the values used in the crossing function above.
+
+*Survival Plot*
+
+```{r}
+s<-survfit(nafld.2,newdata=new,data=liver)
+```
+```{r}
+pp.1<-do.call(survfit,list(formula=nafld.2,newdata=new,data=liver))
+```
+```{r}
+g<-ggsurvplot(pp.1,conf.int = F)
+g
+```
+
+In analyzing the above survival plot, there are 16 stratum which correspond to the 16 combinations in the data frame “new”. Being that “up and to the right” represents the best survival curve, this means that subjects in the top survival curve are predicted to take the longest to die, and thus, have the best survival.
+
+Therefore, comparing the results of the cox proportional hazards and the survival plot, we can see that the top survival curve which predicts the best survival is blue. However, since there are 4 blue strata, to ensure we are looking at the correct one, we will use the model’s output and the legend to confirm. In the output for the cox proportional hazards the coefficient for age was positive which meant that the probability of death is higher for an older individual. Therefore, that also means that the smaller the age the better chance of survival. From our predicted probabilities, the two combinations of age that we used from analyzing the quartiles are 44 and 64. Therefore, an individual with a better survival would have an age of 44. Next, the coefficient for sex was positive which meant that the probability of death is higher for males compared to females, all else equal. Therefore, an individual with a better survival would have an age of 44 and would be female. The coefficient for weight was positive which meant that the probability of death is higher the more an individual weighs. Therefore, that also means that the lower the weight the better chance of survival. From our predicted probabilities, the two combinations of weight that we used from analyzing the quartiles are 70 and 99.3. Therefore, an individual with a better survival would have a weight of 70, be female and have an age of 44. Lastly, since the coefficient for height is negative, this means the taller an individual is, the lower the hazard of death is. From our predicted probabilities, the two combinations of height that we used from analyzing the quartiles are 162 and 177. Therefore, an individual with a better survival would have a weight of 70, be female, have an age of 44, and a height of 177. Therefore, using the legend, the row that corresponds to this is row 2 which corresponds with the blue stratum 2. Therefore, the best survival curve is stratum 2 which has a sex of female, lower age, lower weight and higher height. Using this same logic, in comparing the results from the cox proportional hazards, the legend and the plot, the subject with the lowest probability of survival would be male with an age of 64, a weight of 99.3 and a height of 162. According to the legend, this corresponds with row and stratum 15 which in the plot can be shown by the green curve. Since this curve is the lowest, this represents the individual with the smallest probability of survival. Furthermore, our analysis from the survival curves and cox proportional hazards are consistent.
+
+Now we will analyze the effects of changes in the variables. The first one we will assess is change in sex. The example we will use is comparing a subject who is: female, age=44, weight=70, height=162 and male, age=44, weight=70 and height=162. The survival curve for the first one is red and is stratum 1, and the second case is stratum 5 which is light purple. In comparing these cases, since the coefficient for sex is positive and male is the benchmark, the subject with the first case has a better probability of survival and has a survival curve higher than the second case. The second one we will assess is change in age. The example we will use is comparing a subject as: female, age=44, weight=70, height=162 and female, age=64, weight=70 and height=162. The survival curve for the first one is red and is stratum 1, and the second case is stratum 9 which is dark pink. In comparing these cases, since the coefficient for age is positive, the subject with the first case has a better probability of survival and has a survival curve higher than the second case. The third one we will assess is change in weight. The example we will use is comparing a subject as: female, age=44, weight=70, height=162 and female, age=44, weight=99.3 and height=162. The survival curve for the first one is red and is stratum 1, and the second case is stratum 3 which is a blue curve. In comparing these cases, since the coefficient for weight is positive, the subject with the first case has a better probability of survival since they have the lower weight. The last one we will assess is change in height. The example we will use is comparing a subject as: female, age=44, weight=70 and height=162 and female, age=44, weight=70 and height=177. The survival curve for the first one is red and is stratum 1, and the second case is stratum 2 which is a blue curve. In comparing these cases, since the coefficient for height is negative, the subject with the second case has a better probability of survival since they have the higher height.
+
+*Marginal Residual Plot*
+
+```{r}
+ggcoxdiagnostics(nafld.2) +geom_smooth(se=F)
+```
+
+In analyzing the graph, it seems that the points are clustered together until a Linear Prediction of 0 when the points although still clustered together, start to slope downwards. The points begin to fan downwards at this point. Additionally, there is two sets of clustered points, one above a Residual of 0 and one below that seem to be similar in shape and trend as they both have points fanning out downwards after a Linear Prediction of 0. In analyzing the Martingale residuals for the model we are checking to see if the smooth trend deviates away from the red dotted line. It appears that the smooth trend does not deviate far from the red dotted line until a Linear Prediction of 2.5. At this point it appears that the smooth trend begins to slope upward. However, the grey smooth trend is also not significantly different from zero, since the smooth trend is in line with a Residual of 0 for the majority of the graph. Furthermore, since there is no curvature or “down-and-up” wave pattern with the smooth trend, we conclude there is a correct relationship between survival and the variables age, sex, weight and height.
+
+**Conclusion**
+
+In analyzing the results of our data analysis, we learned that the best characteristics for predicted survival is for an individual who is female, has a lower age, a lower weight and a higher height. We also learned that the characteristics that correlate with the lowest probability of survival are male, older age, higher weight and shorter height. Specifically, subjects with the highest probability of survival are female, aged 44, with a weight of 70 and a height of 177. In this data, subjects with the lowest probability of survival are male, aged 64 with a weight of 99.3 and a height of 162. Lastly, we learned that “bmi” is not significant in predicting survival among subjects. In future studies we would recommend that researchers use a larger sample size with more subjects of different characteristics to participate in the study. By having a larger sample size, this would help in having variability. Additionally, at the beginning of our analysis we noted that there was a lot of values that were missing (NA), and due to this we needed to take out 4,987 rows. Therefore, by having a larger sample size or ensuring that the researchers are collecting as much data as possible to decrease the possibility of NA’s, this will help in reducing errors, outliers and biases. Furthermore, the more data researchers have that is fully completed without missing values, the more accurate depiction they can conclude of the population.
+
+*References*
+
+AM Allen, TM Therneau, JJ Larson, A Coward, VK Somers and PS Kamath, Nonalcoholic Fatty Liver Disease Incidence and Impact on Metabolic Burden and Death: A 20 Year Community Study, Hepatology 67:1726-1736, 2018.
+
+Therneau, T. M. (2020, March 7). Survival Analysis. Retrieved from https://cran.r-project.org/web/packages/survival/survival.pdf?fbclid=IwAR1wdOvuGmlj_D8fNmutGKUio8h9hO41EwRVXDmhPbZdUdVK5A_-My0GA2I
